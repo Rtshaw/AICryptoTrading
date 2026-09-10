@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS auto_trade_log;
+DROP TABLE IF EXISTS orders;
+DROP TABLE IF EXISTS ai_signals;
+DROP TABLE IF EXISTS watchlist;
+DROP TABLE IF EXISTS settings;
+DROP TABLE IF EXISTS candles_15m;

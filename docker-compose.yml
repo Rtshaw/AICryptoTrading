@@ -1,0 +1,26 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cryptotrading}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cryptotrading}
+      POSTGRES_DB: ${POSTGRES_DB:-cryptotrading}
+    ports:
+      # Host port 55532 (not 5432) - avoids clashing with a native Postgres
+      # install and with the sibling TWSEDailyTrading project's own 55432.
+      - "55532:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cryptotrading}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+# Postgres only - unlike the sibling TWSEDailyTrading project, this backend
+# talks directly to Binance's own public REST/WebSocket API, so there's no
+# local bridge process to containerize. Run the backend (`go run
+# ./cmd/server`) and frontend (`npm run dev`) natively; see README.md.
+volumes:
+  pgdata:
