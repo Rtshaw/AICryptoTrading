@@ -1,19 +1,20 @@
 import { useState } from "react";
 import { api } from "../api/client";
 import { useMarketStore } from "../store/useMarketStore";
+import { useI18n } from "../i18n/I18nContext";
 import type { AISignal } from "../types";
 
 interface Props {
   symbol: string;
 }
 
-const actionLabel: Record<AISignal["action"], string> = {
-  BUY: "做多",
-  SELL: "做空",
-  HOLD: "觀望",
-};
-
 export function AISignalCard({ symbol }: Props) {
+  const { t } = useI18n();
+  const actionLabel: Record<AISignal["action"], string> = {
+    BUY: t("aiSignal.actionBuy"),
+    SELL: t("aiSignal.actionSell"),
+    HOLD: t("aiSignal.actionHold"),
+  };
   // Sourced from the shared store (not local state) so an auto-triggered
   // signal from the backend's rule-based watcher shows up here live via the
   // WS "signal" broadcast, the same as a manually-requested one.
@@ -56,30 +57,32 @@ export function AISignalCard({ symbol }: Props) {
 
   return (
     <div className="panel">
-      <h3>AI 分析 - {symbol}</h3>
-      {notConfigured && <p className="warn">尚未設定 ANTHROPIC_API_KEY，AI 功能停用（自動交易也因此不會實際下單）。</p>}
+      <h3>{t("aiSignal.title", { symbol })}</h3>
+      {notConfigured && <p className="warn">{t("aiSignal.notConfigured")}</p>}
       {skippedReason && <p className="muted small">{skippedReason}</p>}
       {error && <p className="error">{error}</p>}
 
       <div className="ai-section">
         <div className="ai-header">
-          <span>交易訊號（5分K）</span>
+          <span>{t("aiSignal.header")}</span>
           <button disabled={loading} onClick={requestSignal}>
-            {loading ? "分析中..." : "產生訊號"}
+            {loading ? t("aiSignal.generating") : t("aiSignal.generate")}
           </button>
         </div>
         {signal ? (
           <div className={`signal-badge ${signal.action.toLowerCase()}`}>
             <strong>{actionLabel[signal.action]}</strong>
-            <span> 信心 {(signal.confidence * 100).toFixed(0)}%</span>
-            {signal.entry_hint != null && <span> 進場 {signal.entry_hint}</span>}
-            {signal.stop_loss != null && <span> 停損 {signal.stop_loss}</span>}
-            {signal.take_profit != null && <span> 停利 {signal.take_profit}</span>}
-            {signal.funding_rate != null && <span> 資金費率 {(signal.funding_rate * 100).toFixed(4)}%</span>}
+            <span> {t("aiSignal.confidence", { pct: (signal.confidence * 100).toFixed(0) })}</span>
+            {signal.entry_hint != null && <span> {t("aiSignal.entry", { price: signal.entry_hint })}</span>}
+            {signal.stop_loss != null && <span> {t("aiSignal.stop", { price: signal.stop_loss })}</span>}
+            {signal.take_profit != null && <span> {t("aiSignal.target", { price: signal.take_profit })}</span>}
+            {signal.funding_rate != null && (
+              <span> {t("aiSignal.fundingRate", { pct: (signal.funding_rate * 100).toFixed(4) })}</span>
+            )}
             <p className="rationale">{signal.rationale}</p>
           </div>
         ) : (
-          <p className="muted">尚無訊號</p>
+          <p className="muted">{t("aiSignal.noSignal")}</p>
         )}
       </div>
     </div>

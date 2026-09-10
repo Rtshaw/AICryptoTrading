@@ -1,11 +1,19 @@
 import { Dashboard } from "./pages/Dashboard";
+import { useI18n } from "./i18n/I18nContext";
 
 export default function App() {
+  const { lang, setLang, t } = useI18n();
+
   return (
     <div className="app">
       <header className="app-header">
-        <h1>永續合約 AI 交易 Dashboard</h1>
-        <span className="muted small">Binance USDS-M Perpetual Futures · 5分K · 每筆固定保證金</span>
+        <div>
+          <h1>{t("app.title")}</h1>
+          <span className="muted small">{t("app.subtitle")}</span>
+        </div>
+        <button className="lang-toggle" onClick={() => setLang(lang === "zh-TW" ? "en" : "zh-TW")}>
+          {t("app.langToggle")}
+        </button>
       </header>
       <main>
         <Dashboard />

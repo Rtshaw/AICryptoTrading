@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "../api/client";
+import { useI18n } from "../i18n/I18nContext";
 import type { OrderSide, Settings } from "../types";
 
 interface Props {
@@ -14,6 +15,7 @@ interface Props {
 // PlaceManualOrder -> binance.FilterCache.MaxQtyForCap) - there's nothing
 // for the user to size manually.
 export function OrderPanel({ symbol, settings, onFilled }: Props) {
+  const { t } = useI18n();
   const [status, setStatus] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<OrderSide | null>(null);
 
@@ -22,10 +24,12 @@ export function OrderPanel({ symbol, settings, onFilled }: Props) {
     setStatus(null);
     try {
       const order = await api.placeOrder(symbol, side);
-      setStatus(`已送出：${order.side} ${order.qty} (約$${order.notional_usd.toFixed(2)})，狀態 ${order.status}`);
+      setStatus(
+        t("order.sent", { side: order.side, qty: order.qty, notional: order.notional_usd.toFixed(2), status: order.status }),
+      );
       onFilled?.();
     } catch (e) {
-      setStatus(`錯誤：${String(e)}`);
+      setStatus(t("order.error", { error: String(e) }));
     } finally {
       setSubmitting(null);
     }
@@ -33,19 +37,22 @@ export function OrderPanel({ symbol, settings, onFilled }: Props) {
 
   return (
     <div className="panel">
-      <h3>手動下單 - {symbol}</h3>
+      <h3>{t("order.title", { symbol })}</h3>
       <p className="muted small">
-        市價單，固定投入{settings?.margin_usd ?? "?"}USDT保證金、{settings?.leverage ?? "?"}x槓桿
-        {settings?.margin_type ?? ""}（約{settings ? (settings.margin_usd * settings.leverage).toFixed(2) : "?"}USDT名目倉位，
-        伺服器端強制），不受自動交易開關影響。
+        {t("order.description", {
+          margin: settings?.margin_usd ?? "?",
+          leverage: settings?.leverage ?? "?",
+          marginType: settings?.margin_type ?? "",
+          notional: settings ? (settings.margin_usd * settings.leverage).toFixed(2) : "?",
+        })}
       </p>
       <div className="order-form">
         <div className="side-toggle">
           <button className="buy" disabled={submitting !== null} onClick={() => submit("BUY")}>
-            {submitting === "BUY" ? "送出中..." : "做多 (BUY)"}
+            {submitting === "BUY" ? t("order.buying") : t("order.buy")}
           </button>
           <button className="sell" disabled={submitting !== null} onClick={() => submit("SELL")}>
-            {submitting === "SELL" ? "送出中..." : "做空 (SELL)"}
+            {submitting === "SELL" ? t("order.selling") : t("order.sell")}
           </button>
         </div>
         {status && <p className="order-status">{status}</p>}

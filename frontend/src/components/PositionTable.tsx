@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "../api/client";
+import { useI18n } from "../i18n/I18nContext";
 import type { Position } from "../types";
 
 interface Props {
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export function PositionTable({ positions, onChanged }: Props) {
+  const { t } = useI18n();
   const [flattening, setFlattening] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,22 +28,22 @@ export function PositionTable({ positions, onChanged }: Props) {
 
   return (
     <div className="panel">
-      <h3>持倉</h3>
+      <h3>{t("position.title")}</h3>
       {error && <p className="error">{error}</p>}
       {positions.length === 0 ? (
-        <p className="muted">目前無持倉</p>
+        <p className="muted">{t("position.empty")}</p>
       ) : (
         <table>
           <thead>
             <tr>
-              <th>合約</th>
-              <th>方向</th>
-              <th>數量</th>
-              <th>進場價</th>
-              <th>標記價</th>
-              <th>未實現損益</th>
-              <th>槓桿</th>
-              <th>強平價</th>
+              <th>{t("position.colSymbol")}</th>
+              <th>{t("position.colSide")}</th>
+              <th>{t("position.colQty")}</th>
+              <th>{t("position.colEntry")}</th>
+              <th>{t("position.colMark")}</th>
+              <th>{t("position.colPnl")}</th>
+              <th>{t("position.colLeverage")}</th>
+              <th>{t("position.colLiq")}</th>
               <th></th>
             </tr>
           </thead>
@@ -49,7 +51,9 @@ export function PositionTable({ positions, onChanged }: Props) {
             {positions.map((p) => (
               <tr key={p.symbol}>
                 <td>{p.symbol}</td>
-                <td className={p.side === "long" ? "buy" : "sell"}>{p.side === "long" ? "多" : "空"}</td>
+                <td className={p.side === "long" ? "buy" : "sell"}>
+                  {p.side === "long" ? t("position.sideLong") : t("position.sideShort")}
+                </td>
                 <td>{p.qty}</td>
                 <td>{p.entry_price}</td>
                 <td>{p.mark_price}</td>
@@ -58,7 +62,7 @@ export function PositionTable({ positions, onChanged }: Props) {
                 <td>{p.liquidation_price ? p.liquidation_price.toFixed(4) : "-"}</td>
                 <td>
                   <button disabled={flattening === p.symbol} onClick={() => flatten(p.symbol)}>
-                    {flattening === p.symbol ? "平倉中…" : "平倉"}
+                    {flattening === p.symbol ? t("position.flattening") : t("position.flatten")}
                   </button>
                 </td>
               </tr>

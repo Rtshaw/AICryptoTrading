@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { useI18n } from "../i18n/I18nContext";
 import type { Settings, WatchlistAIResult, WatchlistItem } from "../types";
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export function WatchlistPanel({ selected, onSelect, refreshToken, settings }: Props) {
+  const { t } = useI18n();
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [newSymbol, setNewSymbol] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -65,18 +67,26 @@ export function WatchlistPanel({ selected, onSelect, refreshToken, settings }: P
 
   const aiPickBySymbol = new Map((aiResult?.picks ?? []).map((p) => [p.symbol, p]));
 
+  const sizing = settings
+    ? t("watchlist.footnoteSizing", {
+        margin: settings.margin_usd,
+        leverage: settings.leverage,
+        notional: settings.effective_notional_usd.toFixed(2),
+      })
+    : t("watchlist.footnoteSizingFallback");
+
   return (
     <div className="panel">
-      <h3>關注清單</h3>
+      <h3>{t("watchlist.title")}</h3>
       {error && <p className="error">{error}</p>}
       <ul className="watchlist">
         {items.map((item) => {
           const aiPick = aiPickBySymbol.get(item.symbol);
           const title = aiPick
-            ? `AI選股理由（近期訊號次數：${aiPick.recent_signal_count}）：${aiPick.rationale}`
+            ? t("watchlist.aiRationalePrefix", { count: aiPick.recent_signal_count, rationale: aiPick.rationale })
             : item.tradable_at_cap
-              ? `目前設定可下單，約${item.max_qty_at_cap}顆`
-              : "以目前設定的保證金×槓桿換算，低於交易所最小下單量/名目金額限制，無法自動或手動下單（僅供看盤/訊號參考）";
+              ? t("watchlist.tradableTooltip", { qty: item.max_qty_at_cap ?? "-" })
+              : t("watchlist.chartOnlyTooltip");
           return (
             <li key={item.symbol}>
               <button
@@ -88,10 +98,10 @@ export function WatchlistPanel({ selected, onSelect, refreshToken, settings }: P
                 {item.price != null && <span className="watchlist-price">{item.price}</span>}
                 {aiPick && <span className="ai-pick-badge">AI×{aiPick.recent_signal_count}</span>}
                 <span className={item.tradable_at_cap ? "feasible-badge yes" : "feasible-badge no"}>
-                  {item.tradable_at_cap ? "可下單" : "僅看盤"}
+                  {item.tradable_at_cap ? t("watchlist.tradable") : t("watchlist.chartOnly")}
                 </span>
               </button>
-              <button className="remove-btn" onClick={() => remove(item.symbol)} title="移除">
+              <button className="remove-btn" onClick={() => remove(item.symbol)} title={t("watchlist.remove")}>
                 ×
               </button>
             </li>
@@ -102,21 +112,22 @@ export function WatchlistPanel({ selected, onSelect, refreshToken, settings }: P
         <input
           value={newSymbol}
           onChange={(e) => setNewSymbol(e.target.value)}
-          placeholder="合約代號 例如 SOLUSDT"
+          placeholder={t("watchlist.addPlaceholder")}
           onKeyDown={(e) => e.key === "Enter" && add()}
         />
-        <button onClick={add}>新增</button>
+        <button onClick={add}>{t("watchlist.add")}</button>
       </div>
       <div className="add-row">
         <button onClick={refreshAI} disabled={aiLoading}>
-          {aiLoading ? "AI選股中…" : "AI每日選股"}
+          {aiLoading ? t("watchlist.aiRefreshing") : t("watchlist.aiRefresh")}
         </button>
-        {aiResult?.run_date && <span className="muted small">上次選股：{aiResult.run_date}（{aiResult.picks.length}檔）</span>}
+        {aiResult?.run_date && (
+          <span className="muted small">
+            {t("watchlist.lastRefresh", { date: aiResult.run_date, count: aiResult.picks.length })}
+          </span>
+        )}
       </div>
-      <p className="muted small">
-        「僅看盤」代表該合約在目前設定（{settings ? `${settings.margin_usd}USDT保證金×${settings.leverage}x槓桿≈${settings.effective_notional_usd.toFixed(2)}USDT` : "保證金×槓桿"}
-        ）下，交易所最小下單量/名目金額限制無法達成（例如BTCUSDT/ETHUSDT），系統只會顯示K線與AI訊號，不會自動或手動下單。
-      </p>
+      <p className="muted small">{t("watchlist.footnote", { sizing })}</p>
     </div>
   );
 }

@@ -12,8 +12,10 @@ import { KillSwitchToggle } from "../components/KillSwitchToggle";
 import { AutoTradeLogPanel } from "../components/AutoTradeLogPanel";
 import { StrategyOptimizePanel } from "../components/StrategyOptimizePanel";
 import type { AccountSummary, AutoTradeLogEntry, Position, Settings } from "../types";
+import { useI18n } from "../i18n/I18nContext";
 
 export function Dashboard() {
+  const { t } = useI18n();
   const selectedSymbol = useMarketStore((s) => s.selectedSymbol);
   const setSelectedSymbol = useMarketStore((s) => s.setSelectedSymbol);
   const candlesBySymbol = useMarketStore((s) => s.candles);
@@ -97,7 +99,7 @@ export function Dashboard() {
         </div>
         <div className="col-center">
           <div className="panel">
-            <h3>{selectedSymbol} - 5分K</h3>
+            <h3>{t("chart.header", { symbol: selectedSymbol })}</h3>
             <CandleChart candles={candles} signals={signals} />
           </div>
           <PositionTable positions={positions} onChanged={reloadPositions} />
