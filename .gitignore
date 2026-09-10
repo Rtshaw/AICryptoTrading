@@ -1,7 +1,9 @@
 # backend
 backend/bin/
 backend/*.exe
+backend/*.exe~
 backend/tmp/
+backend/detached-server.pid
 
 # frontend
 frontend/node_modules/
