@@ -1,5 +1,5 @@
 # 永續合約 AI 交易 Dashboard
-[By me a Coffee](https://buymeacoffee.com/aps32777x)
+[![BuyMeACoffee](https://raw.githubusercontent.com/pachadotdev/buymeacoffee-badges/main/bmc-donate-yellow.svg)](https://buymeacoffee.com/aps32777x)
 
 *(English explanation available at the bottom of this file: [English Overview](#english-overview))*
 
