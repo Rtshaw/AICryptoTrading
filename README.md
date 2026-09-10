@@ -265,7 +265,7 @@ backend/          Go + Gin API server, organized by package under internal/
   internal/httpapi/       REST API
   internal/positionstore/ Live position/balance cache, updated from Binance's user-data-stream
 frontend/          React + Vite + TypeScript dashboard
-docker-compose.yml  Postgres only - no bridge process, the backend talks to Binance's public API directly
+docker-compose.yml  Postgres + backend + frontend - no bridge process, the backend container talks to Binance's public API directly
 ```
 
 ### Quick start
@@ -278,9 +278,17 @@ This machine may run other projects side by side, so the default ports are delib
 | Backend API           | 8280 |
 | Frontend (vite dev)  | 5290  |
 
-1. **Database**: `cp .env.example .env` then `docker compose up -d postgres`.
+**Option A - Docker Compose (whole stack):**
+
+1. `cp .env.example .env` and `cp .env.prompts.example .env.prompts`, then fill in real credentials in `.env` (see step 2 below for which ones matter).
+2. `docker compose up -d --build` - builds the backend image, runs Postgres/backend/frontend together, migrations run automatically on backend startup. Open http://localhost:5290.
+3. Note: the backend container does NOT read `.env.prompts` (see "AI prompts" below) - it always uses the built-in default prompts. Use Option B if you need the customized prompt text.
+
+**Option B - native processes (what the detached-deployment tooling in this repo assumes):**
+
+1. `cp .env.example .env` then `docker compose up -d postgres` (just the database).
 2. **Fill in real credentials in `.env`**: `BINANCE_API_KEY`/`BINANCE_API_SECRET` (create at binance.com/en/my/settings/api-management with Futures trading enabled, IP-whitelisting recommended - **this is your real mainnet account**) and `ANTHROPIC_API_KEY` (console.anthropic.com - without this, the AI endpoints report `{configured:false}` and auto-trading is effectively a no-op, since the rule alone never places an order by itself).
-3. **Backend**: `cd backend && go run ./cmd/server` (load `../.env` into the environment first). Migrations run automatically on startup.
+3. **Backend**: `cd backend && go build -o cryptotrading-server.exe ./cmd/server && powershell -File .\restart-detached.ps1` (Windows; runs it detached in the background, reading both `.env` and the optional `.env.prompts`) - or just `go run ./cmd/server` in a foreground terminal with `../.env` loaded into the environment. Migrations run automatically on startup.
 4. **Frontend**: `cd frontend && cp .env.example .env && npm install && npm run dev`, then open http://localhost:5290.
 
 ### Strategy: ICT Silver Bullet (with a 2026-era upgrade)
@@ -318,7 +326,7 @@ Manual order placement and flatten (dashboard) share the same margin x leverage 
 
 ### AI prompts
 
-The two system prompts Claude receives (`internal/ai.GenerateSignal` and `SelectDailyWatchlist`) are overridable via `AI_SIGNAL_SYSTEM_PROMPT`/`AI_WATCHLIST_SYSTEM_PROMPT` in `.env`, using a multi-line heredoc syntax (`KEY<<EOF` ... a line that is exactly `EOF` ends it) - see `.env.example` for the current seed text. Editing them tunes the AI's wording/judgment without a Go rebuild; a backend restart is still required to pick up a change (read once at startup, not live-reloaded). If removed from `.env` entirely, the backend falls back to the built-in defaults in `internal/config/config.go`.
+The two system prompts Claude receives (`internal/ai.GenerateSignal` and `SelectDailyWatchlist`) are overridable via `AI_SIGNAL_SYSTEM_PROMPT`/`AI_WATCHLIST_SYSTEM_PROMPT` in a separate `.env.prompts` file (copy `.env.prompts.example` to get started), using a multi-line heredoc syntax (`KEY<<EOF` ... a line that is exactly `EOF` ends it). This lives outside `.env` itself because Docker Compose's own `.env` parser fails hard on that syntax - keeping `.env` plain `KEY=value` is what makes `docker compose up` work at all. Only the native restart path (`restart-detached.ps1`, or manually loading both files into the environment before `go run`) reads `.env.prompts`; the docker-compose `backend` service does not, and always uses the built-in default prompts in `internal/config/config.go`. Either way, editing the prompt text tunes the AI's wording/judgment without a Go rebuild - a backend restart is still required to pick up a change (read once at startup, not live-reloaded).
 
 ### Known limitations (deliberate scope choices, not oversights)
 

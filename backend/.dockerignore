@@ -1,0 +1,6 @@
+*.exe
+*.exe~
+*.log
+detached-server.pid
+tmp/
+bin/

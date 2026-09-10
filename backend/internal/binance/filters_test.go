@@ -80,3 +80,57 @@ func TestMaxQtyForCapUnknownSymbol(t *testing.T) {
 		t.Fatal("expected infeasible for a symbol with no cached filters")
 	}
 }
+
+// TestRoundPrice_MatchesProductionFailure reproduces the exact live incident
+// that motivated RoundPrice's existence: a 5-decimal OTE-computed stop/take-
+// profit price (2.43622 / 2.41621) sent unrounded as an algo order's
+// triggerPrice for NEARUSDT (tickSize 0.001, pricePrecision 3) got rejected
+// by Binance with code=-1111 "Precision is over the maximum defined for
+// this asset", leaving a real short position with no protective orders at
+// all. RoundPrice must collapse both to a valid 3-decimal, tick-aligned price.
+func TestRoundPrice_MatchesProductionFailure(t *testing.T) {
+	fc := NewFilterCache(nil)
+	seed(fc, map[string]SymbolFilters{
+		"NEARUSDT": {Symbol: "NEARUSDT", TickSize: 0.001, PricePrecision: 3},
+	})
+
+	cases := []struct {
+		name  string
+		price float64
+		want  float64
+	}{
+		{"stop_loss", 2.43622, 2.436},
+		{"take_profit", 2.41621, 2.416},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := fc.RoundPrice("NEARUSDT", c.price)
+			if got != c.want {
+				t.Fatalf("RoundPrice(NEARUSDT, %v) = %v, want %v", c.price, got, c.want)
+			}
+		})
+	}
+}
+
+func TestRoundPrice_RoundsToNearestTickNotFloor(t *testing.T) {
+	fc := NewFilterCache(nil)
+	seed(fc, map[string]SymbolFilters{
+		"TESTUSDT": {Symbol: "TESTUSDT", TickSize: 0.01, PricePrecision: 2},
+	})
+	// 1.2349 is closer to 1.23 than 1.24 - nearest-tick, not floor-to-tick
+	// (which would give the same answer here) or ceil-to-tick (1.24, wrong).
+	if got := fc.RoundPrice("TESTUSDT", 1.2349); got != 1.23 {
+		t.Fatalf("RoundPrice = %v, want 1.23", got)
+	}
+	// 1.2351 is closer to 1.24 - must round up, not floor down to 1.23.
+	if got := fc.RoundPrice("TESTUSDT", 1.2351); got != 1.24 {
+		t.Fatalf("RoundPrice = %v, want 1.24 (floor would wrongly give 1.23)", got)
+	}
+}
+
+func TestRoundPrice_NoFilterDataFailsOpen(t *testing.T) {
+	fc := NewFilterCache(nil)
+	if got := fc.RoundPrice("NOSUCHUSDT", 2.43622); got != 2.43622 {
+		t.Fatalf("RoundPrice with no cached filters should pass the price through unchanged, got %v", got)
+	}
+}

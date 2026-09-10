@@ -91,7 +91,11 @@ func (t *Trader) execute(ctx context.Context, signal *models.AISignal) (decision
 	// existing opposite position (see isFreshEntry above) since that
 	// position's own SL/TP, placed when IT was opened, remains valid.
 	if isFreshEntry && signal.StopLoss != nil && signal.TakeProfit != nil {
-		t.placeProtectiveOrders(ctx, symbol, side, st.Leverage, *signal.StopLoss, *signal.TakeProfit)
+		// Errors are already logged inside placeProtectiveOrders; the
+		// automatic path never rolls back or fails the entry over this -
+		// see its doc comment. AttachProtectiveOrders is the manual
+		// recovery path for when this does fail.
+		_, _ = t.placeProtectiveOrders(ctx, symbol, side, st.Leverage, *signal.StopLoss, *signal.TakeProfit)
 	}
 
 	return models.DecisionExecuted, "", &id
@@ -102,27 +106,62 @@ func (t *Trader) execute(ctx context.Context, signal *models.AISignal) (decision
 // is logged but does not roll back or fail the entry - the position is
 // already open on Binance regardless; losing the protective order just
 // means it's temporarily unprotected until this is noticed (visible via the
-// missing rows in GET /api/account/orders, or Binance's own order history).
-func (t *Trader) placeProtectiveOrders(ctx context.Context, symbol string, entrySide models.OrderSide, leverage int, stopLoss, takeProfit float64) {
+// missing rows in GET /api/account/orders, or Binance's own order history,
+// or via AttachProtectiveOrders below). Returns the two placement errors
+// (nil on success) so a caller that needs to know - like AttachProtectiveOrders
+// - can react; the automatic entry-fill path above ignores them by design.
+func (t *Trader) placeProtectiveOrders(ctx context.Context, symbol string, entrySide models.OrderSide, leverage int, stopLoss, takeProfit float64) (stopErr, takeProfitErr error) {
 	closeSide := models.OrderSideSell
 	if entrySide == models.OrderSideSell {
 		closeSide = models.OrderSideBuy
 	}
 
-	place := func(orderType, clientPrefix string, triggerPrice float64) {
+	place := func(orderType, clientPrefix string, triggerPrice float64) error {
+		// AI-computed stop/target prices (from strategy.SBSignal's OTE/
+		// Fibonacci arithmetic) are not naturally aligned to the exchange's
+		// PRICE_FILTER tickSize the way a real traded price is - sending one
+		// unrounded gets the whole algo order rejected with code=-1111
+		// "Precision is over the maximum defined for this asset", silently
+		// leaving the position unprotected (see the log line below).
+		triggerPrice = t.Filters.RoundPrice(symbol, triggerPrice)
 		clientAlgoID := clientPrefix + strconv.FormatInt(time.Now().UnixNano(), 36)
 		resp, err := t.Binance.PlaceClosePositionAlgoOrder(ctx, symbol, closeSide, orderType, triggerPrice, clientAlgoID)
 		if err != nil {
 			log.Printf("autotrader: place %s for %s at %.8f failed (position is OPEN without this protection): %v", orderType, symbol, triggerPrice, err)
-			return
+			return err
 		}
 		if err := t.recordAlgoOrder(ctx, resp, symbol, closeSide, orderType, leverage); err != nil {
 			log.Printf("autotrader: record %s algo order %d for %s failed: %v", orderType, resp.AlgoID, symbol, err)
+			return err
 		}
+		return nil
 	}
 
-	place("STOP_MARKET", "sl", stopLoss)
-	place("TAKE_PROFIT_MARKET", "tp", takeProfit)
+	stopErr = place("STOP_MARKET", "sl", stopLoss)
+	takeProfitErr = place("TAKE_PROFIT_MARKET", "tp", takeProfit)
+	return stopErr, takeProfitErr
+}
+
+// AttachProtectiveOrders is the manual recovery path for a position that
+// ended up open without stop-loss/take-profit protection (e.g. the
+// entry-time attempt in execute() failed - see placeProtectiveOrders).
+// Reuses the exact same placement logic, keyed off the position's CURRENT
+// live side/leverage rather than trusting a caller-supplied direction.
+// Errors if there's no open position for symbol right now.
+func (t *Trader) AttachProtectiveOrders(ctx context.Context, symbol string, stopLoss, takeProfit float64) error {
+	pos, ok := t.Positions.Get(symbol)
+	if !ok || pos.Qty == 0 {
+		return fmt.Errorf("no open position for %s", symbol)
+	}
+	entrySide := models.OrderSideBuy
+	if pos.Side == "short" {
+		entrySide = models.OrderSideSell
+	}
+	stopErr, takeProfitErr := t.placeProtectiveOrders(ctx, symbol, entrySide, pos.Leverage, stopLoss, takeProfit)
+	if stopErr != nil || takeProfitErr != nil {
+		return fmt.Errorf("stop_loss error: %v, take_profit error: %v", stopErr, takeProfitErr)
+	}
+	return nil
 }
 
 // PlaceManualOrder routes a user-initiated order through the exact same

@@ -13,6 +13,7 @@ frontend/.tsbuild-node/
 
 # env - contains real Binance API keys
 .env
+.env.prompts
 .env.*.local
 
 # misc

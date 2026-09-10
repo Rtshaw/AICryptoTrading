@@ -22,6 +22,7 @@ type SymbolFilters struct {
 	TickSize          float64
 	MinNotionalUSD    float64
 	QuantityPrecision int
+	PricePrecision    int
 }
 
 // FilterCache holds the latest exchangeInfo filters for every symbol,
@@ -47,7 +48,7 @@ func (fc *FilterCache) Refresh(ctx context.Context) error {
 
 	next := make(map[string]SymbolFilters, len(symbols))
 	for _, s := range symbols {
-		f := SymbolFilters{Symbol: s.Symbol, Status: s.Status, QuantityPrecision: s.QuantityPrecision}
+		f := SymbolFilters{Symbol: s.Symbol, Status: s.Status, QuantityPrecision: s.QuantityPrecision, PricePrecision: s.PricePrecision}
 
 		var lotStep, lotMin, lotMax float64
 		haveMarketLot := false
@@ -168,6 +169,48 @@ func (fc *FilterCache) MaxQtyForCap(symbol string, price, capUSD float64) Sizing
 	}
 
 	return SizingResult{Feasible: true, Qty: steppedQty, NotionalUSD: notional, MinTradableUSD: minTradableUSD}
+}
+
+// RoundPrice rounds price to the symbol's PRICE_FILTER tickSize (the exact
+// bug this guards against: Binance rejects any order/algo-order price that
+// isn't a multiple of tickSize with code=-1111 "Precision is over the
+// maximum defined for this asset" - hit in production because computed
+// stop-loss/take-profit prices, e.g. from strategy.SBSignal's OTE/Fibonacci
+// arithmetic, are NOT naturally tick-aligned the way a real traded price
+// from a candle close is). Falls back to PricePrecision decimal rounding
+// when tickSize is unknown, and returns price unchanged if neither is
+// available for symbol (fails open rather than silently mangling an
+// unrecognized symbol's price).
+func (fc *FilterCache) RoundPrice(symbol string, price float64) float64 {
+	f, ok := fc.Get(symbol)
+	if !ok {
+		return price
+	}
+	if f.TickSize > 0 {
+		// Round-to-nearest-tick, then a nearest-decimal cleanup pass (NOT
+		// roundToPrecision's floor) - floor here would risk knocking an
+		// already-correct value down a full tick on the common case where
+		// float64 division leaves it a hair below the true multiple (e.g.
+		// 2.4359999999999999 instead of 2.436).
+		ticks := math.Round(price / f.TickSize)
+		price = ticks * f.TickSize
+		if f.PricePrecision > 0 {
+			price = roundHalfUp(price, f.PricePrecision)
+		}
+		return price
+	}
+	if f.PricePrecision > 0 {
+		return roundHalfUp(price, f.PricePrecision)
+	}
+	return price
+}
+
+func roundHalfUp(v float64, precision int) float64 {
+	if precision < 0 {
+		return v
+	}
+	scale := math.Pow(10, float64(precision))
+	return math.Round(v*scale) / scale
 }
 
 func roundToPrecision(v float64, precision int) float64 {
