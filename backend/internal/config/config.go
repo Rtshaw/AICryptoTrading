@@ -7,11 +7,15 @@ import (
 )
 
 type Config struct {
-	ServerPort      string
-	DatabaseURL     string
-	APIKey          string
-	AnthropicAPIKey string
-	AnthropicModel  string
+	ServerPort        string
+	DatabaseURL       string
+	APIKey            string
+	AIProvider        string
+	AnthropicAPIKey   string
+	AnthropicModel    string
+	OpenRouterAPIKey  string
+	OpenRouterModel   string
+	OpenRouterBaseURL string
 
 	BinanceAPIKey         string
 	BinanceAPISecret      string
@@ -42,11 +46,15 @@ type Config struct {
 
 func Load() Config {
 	return Config{
-		ServerPort:      getenv("SERVER_PORT", "8280"),
-		DatabaseURL:     getenv("DATABASE_URL", "postgres://cryptotrading:cryptotrading@localhost:55532/cryptotrading?sslmode=disable"),
-		APIKey:          os.Getenv("API_KEY"),
-		AnthropicAPIKey: os.Getenv("ANTHROPIC_API_KEY"),
-		AnthropicModel:  getenv("ANTHROPIC_MODEL", "claude-sonnet-5"),
+		ServerPort:        getenv("SERVER_PORT", "8280"),
+		DatabaseURL:       getenv("DATABASE_URL", "postgres://cryptotrading:cryptotrading@localhost:55532/cryptotrading?sslmode=disable"),
+		APIKey:            os.Getenv("API_KEY"),
+		AIProvider:        getenv("AI_PROVIDER", "anthropic"),
+		AnthropicAPIKey:   os.Getenv("ANTHROPIC_API_KEY"),
+		AnthropicModel:    getenv("ANTHROPIC_MODEL", "claude-sonnet-5"),
+		OpenRouterAPIKey:  os.Getenv("OPENROUTER_API_KEY"),
+		OpenRouterModel:   getenv("OPENROUTER_MODEL", "anthropic/claude-sonnet-5"),
+		OpenRouterBaseURL: os.Getenv("OPENROUTER_BASE_URL"),
 
 		BinanceAPIKey:         os.Getenv("BINANCE_API_KEY"),
 		BinanceAPISecret:      os.Getenv("BINANCE_API_SECRET"),

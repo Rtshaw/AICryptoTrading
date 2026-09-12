@@ -74,7 +74,7 @@ type SignalResult struct {
 // judged has changed.
 func (c *Client) GenerateSignal(ctx context.Context, req SignalRequest) (*SignalResult, error) {
 	if !c.enabled {
-		return nil, ErrNotConfigured
+		return nil, c.notConfiguredError()
 	}
 
 	tool := anthropic.ToolParam{
@@ -129,7 +129,7 @@ func (c *Client) GenerateSignal(ctx context.Context, req SignalRequest) (*Signal
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("ai: generate signal: %w", err)
+		return nil, fmt.Errorf("ai: %s generate signal: %w", c.provider, err)
 	}
 
 	for _, block := range resp.Content {
@@ -137,14 +137,14 @@ func (c *Client) GenerateSignal(ctx context.Context, req SignalRequest) (*Signal
 			raw := []byte(tu.JSON.Input.Raw())
 			var parsed SignalResult
 			if err := json.Unmarshal(raw, &parsed); err != nil {
-				return nil, fmt.Errorf("ai: parse signal response: %w", err)
+				return nil, fmt.Errorf("ai: %s parse signal response: %w", c.provider, err)
 			}
 			parsed.Rationale = stripTrailingTagArtifacts(parsed.Rationale)
 			parsed.RawJSON = raw
 			return &parsed, nil
 		}
 	}
-	return nil, fmt.Errorf("ai: model did not call %s", emitSignalTool)
+	return nil, fmt.Errorf("ai: %s model did not call %s", c.provider, emitSignalTool)
 }
 
 // trailingTagArtifact matches stray tool-call-transcript-looking closing

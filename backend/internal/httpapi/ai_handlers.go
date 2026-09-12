@@ -51,7 +51,7 @@ func registerAIRoutes(g *gin.RouterGroup, d Deps) {
 		}
 
 		signal, err := signalengine.GenerateAndBroadcast(c.Request.Context(), signalengine.Deps{
-			Pool: d.Pool, Market: d.Market, Positions: d.Positions, AI: d.AI, Hub: d.Hub, Model: d.Cfg.AnthropicModel,
+			Pool: d.Pool, Market: d.Market, Positions: d.Positions, AI: d.AI, Hub: d.Hub, Model: d.AI.Model(),
 		}, body.Symbol, setup)
 		if err != nil {
 			if errors.Is(err, ai.ErrNotConfigured) {

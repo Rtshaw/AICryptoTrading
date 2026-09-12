@@ -21,7 +21,7 @@ import (
 // weekday/holiday skip logic - Binance perpetuals trade every day.
 func runWatchlistAIScheduler(ctx context.Context, pool *pgxpool.Pool, aiClient *ai.Client, bclient *binance.Client, filters *binance.FilterCache, refreshHourUTC int, interval string, restart func()) {
 	if !aiClient.Enabled() {
-		log.Println("watchlistai: ANTHROPIC_API_KEY not set - daily watchlist scheduler disabled")
+		log.Printf("watchlistai: %s API key not set - daily watchlist scheduler disabled", aiClient.Provider())
 		return
 	}
 

@@ -26,6 +26,23 @@ func main() {
 	defer stop()
 
 	cfg := config.Load()
+	aiClient, err := ai.New(ai.Config{
+		Provider:              cfg.AIProvider,
+		AnthropicAPIKey:       cfg.AnthropicAPIKey,
+		AnthropicModel:        cfg.AnthropicModel,
+		OpenRouterAPIKey:      cfg.OpenRouterAPIKey,
+		OpenRouterModel:       cfg.OpenRouterModel,
+		OpenRouterBaseURL:     cfg.OpenRouterBaseURL,
+		SignalSystemPrompt:    cfg.AISignalSystemPrompt,
+		WatchlistSystemPrompt: cfg.AIWatchlistSystemPrompt,
+	})
+	if err != nil {
+		log.Fatalf("ai: initialize: %v", err)
+	}
+	log.Printf("ai: provider=%s model=%s", aiClient.Provider(), aiClient.Model())
+	if !aiClient.Enabled() {
+		log.Printf("ai: %s API key not set - AI endpoints report {configured:false}, and auto-trading is effectively a no-op (it never trades off the bare rule signal alone)", aiClient.Provider())
+	}
 	if cfg.BinanceAPIKey == "" || cfg.BinanceAPISecret == "" {
 		log.Println("WARNING: BINANCE_API_KEY/BINANCE_API_SECRET not set - account/order endpoints will fail; market data and charting still work")
 	}
@@ -55,17 +72,12 @@ func main() {
 	positions := positionstore.New()
 	hydrateAccountState(ctx, bclient, positions)
 
-	aiClient := ai.New(cfg.AnthropicAPIKey, cfg.AnthropicModel, cfg.AISignalSystemPrompt, cfg.AIWatchlistSystemPrompt)
-	if !aiClient.Enabled() {
-		log.Println("ai: ANTHROPIC_API_KEY not set - AI endpoints report {configured:false}, and auto-trading is effectively a no-op (it never trades off the bare rule signal alone)")
-	}
-
 	sbParams, err := strategy.LoadParams(ctx, pool)
 	if err != nil {
 		log.Printf("strategy: load params failed, using defaults: %v", err)
 		sbParams = strategy.DefaultSBParams()
 	}
-	trader := autotrader.New(pool, market, bclient, filters, positions, aiClient, hub, cfg.AnthropicModel, cfg.MaxAutoOrdersPerDay, sbParams)
+	trader := autotrader.New(pool, market, bclient, filters, positions, aiClient, hub, aiClient.Model(), cfg.MaxAutoOrdersPerDay, sbParams)
 	if d, err := time.ParseDuration(cfg.KlineInterval); err == nil {
 		trader.MinOrderInterval = d
 	}

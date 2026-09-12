@@ -13,7 +13,7 @@ Go + Gin + PostgreSQL 後端、React + Vite 前端的 Binance USDS-M 永續合�
 backend/          Go + Gin API server，internal/ 底下依功能拆套件
   internal/binance/     Binance USDS-M Futures REST + WebSocket 客戶端（無中介bridge，直接串官方API）
   internal/strategy/    技術指標 + 規則型策略（MA/RSI/MACD/VWAP，UTC日界重置）
-  internal/ai/          Claude API訊號產生（方法論參考自claude-trading-skills，見下方）
+  internal/ai/          Anthropic Messages API訊號產生（可直連Anthropic或經OpenRouter，方法論參考自claude-trading-skills，見下方）
   internal/signalengine/ AI訊號產生+持久化+廣播的共用路徑
   internal/autotrader/  安全關鍵核心：規則轉變偵測→AI確認→保證金×槓桿換算下單量→下真實單→紀錄
   internal/settings/    Kill switch、槓桿、固定保證金金額、保證金模式
@@ -45,8 +45,9 @@ docker compose up -d postgres
 - `BINANCE_API_KEY` / `BINANCE_API_SECRET`：到
   https://www.binance.com/en/my/settings/api-management 建立，**需開啟Futures交易權限**，
   建議加IP白名單。**這是你的真實mainnet帳戶**，伺服器一啟動、只要這兩個key有填、
-  `ANTHROPIC_API_KEY`也有填，就會開始自動評估並可能真的下單（見下方「自動交易怎麼運作」）。
-- `ANTHROPIC_API_KEY`：https://console.anthropic.com 。沒填的話AI端點回傳
+  選定的AI provider key也有填，且runtime kill switch已開啟，才會開始自動評估並可能真的下單
+  （見下方「自動交易怎麼運作」）。
+- AI provider設定請見下方「AI provider 設定」。沒填選定 provider 的 key 時，AI端點回傳
   `{configured:false}`，自動交易引擎也因此形同停用（規則訊號本身永遠不會單獨觸發下單，
   一定要AI確認過）。
 
@@ -70,6 +71,36 @@ npm run dev
 ```
 
 打開 http://localhost:5290。
+
+## AI provider 設定
+
+AI layer 一律使用 Anthropic Messages-compatible tool calling；OpenRouter 模式仍然是透過
+OpenRouter 使用 Claude，不會改變交易策略或訊號 schema。`AI_PROVIDER` 未設定時預設為
+`anthropic`，兩組 key 不會互相代用。
+
+直接使用 Anthropic：
+
+```env
+AI_PROVIDER=anthropic
+ANTHROPIC_API_KEY=...
+ANTHROPIC_MODEL=claude-sonnet-5
+```
+
+使用 OpenRouter credits：
+
+```env
+AI_PROVIDER=openrouter
+OPENROUTER_API_KEY=...
+OPENROUTER_MODEL=anthropic/claude-sonnet-5
+# Optional; default is https://openrouter.ai/api
+OPENROUTER_BASE_URL=
+```
+
+OpenRouter 的 base URL 要放在 SDK 自動附加的 `/v1/messages` 之前，正常設定不需要填
+`OPENROUTER_BASE_URL`，也不需要 `ANTHROPIC_API_KEY`。任何 AI request、tool call 或 tool JSON
+解析錯誤都會 fail closed，不能只靠規則訊號自動下單。Provider migration 或手動整合測試前，
+先用 `GET http://127.0.0.1:8280/api/settings` 確認 `autotrade_enabled=false`，測試完成後仍保持 false，
+再由使用者手動決定是否重新啟用。
 
 ## 自動交易怎麼運作
 
@@ -246,9 +277,9 @@ Go後端/永續合約5分K短中線場景不相容，沒有直接安裝或呼叫
 
 ### What this is
 
-A Go + Gin + PostgreSQL backend with a React + Vite + TypeScript frontend for **automated perpetual-futures trading on Binance USDS-M**, with Claude (Anthropic's API) as a second-opinion confirmation layer before any real order is placed.
+A Go + Gin + PostgreSQL backend with a React + Vite + TypeScript frontend for **automated perpetual-futures trading on Binance USDS-M**, with Claude through either Anthropic's API or OpenRouter's Anthropic Messages-compatible API as a second-opinion confirmation layer before any real order is placed.
 
-**This connects to your real Binance mainnet account and places real market orders.** Unlike the sibling project `TWSEDailyTrading` (which only simulates orders), this one trades real money the moment the backend starts, provided `BINANCE_API_KEY`/`BINANCE_API_SECRET` and `ANTHROPIC_API_KEY` are all set. Read this whole section, especially "Known limitations", before running it.
+**This connects to your real Binance mainnet account and places real market orders.** Unlike the sibling project `TWSEDailyTrading` (which only simulates orders), this one can trade real money when `BINANCE_API_KEY`/`BINANCE_API_SECRET`, the selected AI provider key, and the runtime kill switch are all enabled. Read this whole section, especially "Known limitations", before running it.
 
 ### Project structure
 
@@ -257,7 +288,7 @@ backend/          Go + Gin API server, organized by package under internal/
   internal/binance/       Binance USDS-M Futures REST + WebSocket client (talks to Binance's public API directly, no bridge process)
   internal/strategy/      The Silver Bullet setup detector (see below) - the local rule that gates the AI confirmation step
   internal/backtest/      Replays historical candles through the detector to simulate trades and grid-search parameters
-  internal/ai/            Claude API calls: trade-signal confirmation and daily watchlist selection
+  internal/ai/            Anthropic Messages API calls via direct Anthropic or OpenRouter: trade-signal confirmation and daily watchlist selection
   internal/watchlistai/   Candidate sourcing + signal-frequency backtesting for the AI daily watchlist pick
   internal/signalengine/  Shared path for generating + persisting + broadcasting an AI trade signal
   internal/autotrader/    Safety-critical core: rule detection -> AI confirmation -> margin*leverage sizing -> real order -> protective stop/take-profit -> logging
@@ -287,9 +318,42 @@ This machine may run other projects side by side, so the default ports are delib
 **Option B - native processes (what the detached-deployment tooling in this repo assumes):**
 
 1. `cp .env.example .env` then `docker compose up -d postgres` (just the database).
-2. **Fill in real credentials in `.env`**: `BINANCE_API_KEY`/`BINANCE_API_SECRET` (create at binance.com/en/my/settings/api-management with Futures trading enabled, IP-whitelisting recommended - **this is your real mainnet account**) and `ANTHROPIC_API_KEY` (console.anthropic.com - without this, the AI endpoints report `{configured:false}` and auto-trading is effectively a no-op, since the rule alone never places an order by itself).
+2. **Fill in real credentials in `.env`**: `BINANCE_API_KEY`/`BINANCE_API_SECRET` (create at binance.com/en/my/settings/api-management with Futures trading enabled, IP-whitelisting recommended - **this is your real mainnet account**) and the key for the selected AI provider (`ANTHROPIC_API_KEY` for `AI_PROVIDER=anthropic`, or `OPENROUTER_API_KEY` for `AI_PROVIDER=openrouter`). Without the selected key, AI endpoints report `{configured:false}` and auto-trading is effectively a no-op, since the rule alone never places an order by itself.
 3. **Backend**: `cd backend && go build -o cryptotrading-server.exe ./cmd/server && powershell -File .\restart-detached.ps1` (Windows; runs it detached in the background, reading both `.env` and the optional `.env.prompts`) - or just `go run ./cmd/server` in a foreground terminal with `../.env` loaded into the environment. Migrations run automatically on startup.
 4. **Frontend**: `cd frontend && cp .env.example .env && npm install && npm run dev`, then open http://localhost:5290.
+
+### AI provider configuration
+
+The AI layer always uses the Anthropic Messages-compatible request and structured tool-call
+contract. `AI_PROVIDER` defaults to `anthropic` for backwards compatibility.
+
+Direct Anthropic:
+
+```env
+AI_PROVIDER=anthropic
+ANTHROPIC_API_KEY=...
+ANTHROPIC_MODEL=claude-sonnet-5
+```
+
+OpenRouter:
+
+```env
+AI_PROVIDER=openrouter
+OPENROUTER_API_KEY=...
+OPENROUTER_MODEL=anthropic/claude-sonnet-5
+# Optional; default is https://openrouter.ai/api
+OPENROUTER_BASE_URL=
+```
+
+OpenRouter mode still uses Claude through OpenRouter credits; it does not change the trading strategy,
+signal schema, or watchlist tool. The default base URL is `https://openrouter.ai/api`, so the SDK sends
+requests to `/v1/messages`; do not add `/v1` to the normal base URL. Provider credentials are separate,
+and AI request failures, missing tool calls, or invalid tool JSON fail closed and cannot authorize an
+automatic order.
+
+For provider migration or manual AI integration testing, verify
+`GET http://127.0.0.1:8280/api/settings` returns `"autotrade_enabled":false` before making any AI
+request. Leave it false after testing; automatic trading is a manual user decision.
 
 ### Strategy: ICT Silver Bullet (with a 2026-era upgrade)
 

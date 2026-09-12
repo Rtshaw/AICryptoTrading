@@ -9,7 +9,7 @@ services:
     ports:
       # Host port 55532 (not 5432) - avoids clashing with a native Postgres
       # install and with the sibling TWSEDailyTrading project's own 55432.
-      - "55532:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -36,7 +36,7 @@ services:
     # (internal/config/config.go). Use the native restart path (README.md)
     # if you need the customized prompt text.
     ports:
-      - "${SERVER_PORT:-8280}:${SERVER_PORT:-8280}"
+        - "127.0.0.1:${SERVER_PORT:-8280}:${SERVER_PORT:-8280}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,7 +52,7 @@ services:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules
     ports:
-      - "5290:5290"
+      - "127.0.0.1:5290:5290"
     depends_on:
       - backend
 

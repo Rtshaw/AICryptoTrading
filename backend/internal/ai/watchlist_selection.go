@@ -44,7 +44,7 @@ type WatchlistPick struct {
 // this number) - with a rationale for each.
 func (c *Client) SelectDailyWatchlist(ctx context.Context, candidates []WatchlistCandidate, n int, lookbackDays int) ([]WatchlistPick, error) {
 	if !c.enabled {
-		return nil, ErrNotConfigured
+		return nil, c.notConfiguredError()
 	}
 
 	tool := anthropic.ToolParam{
@@ -74,7 +74,7 @@ func (c *Client) SelectDailyWatchlist(ctx context.Context, candidates []Watchlis
 
 	resp, err := c.anthropic.Messages.New(ctx, anthropic.MessageNewParams{
 		Model:     anthropic.Model(c.model),
-		MaxTokens: 4096,
+		MaxTokens: 3500,
 		System: []anthropic.TextBlockParam{
 			{Text: c.watchlistSystemPrompt},
 		},
@@ -87,7 +87,7 @@ func (c *Client) SelectDailyWatchlist(ctx context.Context, candidates []Watchlis
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("ai: select daily watchlist: %w", err)
+		return nil, fmt.Errorf("ai: %s select daily watchlist: %w", c.provider, err)
 	}
 
 	for _, block := range resp.Content {
@@ -96,12 +96,12 @@ func (c *Client) SelectDailyWatchlist(ctx context.Context, candidates []Watchlis
 				Picks []WatchlistPick `json:"picks"`
 			}
 			if err := json.Unmarshal([]byte(tu.JSON.Input.Raw()), &parsed); err != nil {
-				return nil, fmt.Errorf("ai: parse watchlist selection: %w", err)
+				return nil, fmt.Errorf("ai: %s parse watchlist selection: %w", c.provider, err)
 			}
 			return parsed.Picks, nil
 		}
 	}
-	return nil, fmt.Errorf("ai: model did not call %s", selectWatchlistTool)
+	return nil, fmt.Errorf("ai: %s model did not call %s", c.provider, selectWatchlistTool)
 }
 
 func buildWatchlistPrompt(candidates []WatchlistCandidate, n int, lookbackDays int) string {
